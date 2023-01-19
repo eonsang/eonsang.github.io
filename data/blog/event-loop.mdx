@@ -8,6 +8,35 @@ summary: 자바스크립트의 이벤트 루프에 대해 알아보고, 동작 �
 
 ## 참고 코드를
 
+아래 코드에서 `catch`는 `Error`를 잡아 낼 수 잇는가?
+
+- https://stackoverflow.com/questions/48969591/why-promise-can-not-catch-the-error-throw-by-settimeout
+- https://www.youtube.com/watch?v=8aGhZQkoFbQ
+- [rejectionhandled](https://developer.mozilla.org/en-US/docs/Web/API/Window/rejectionhandled_event)
+- [PromiseRejectionEvent](https://developer.mozilla.org/en-US/docs/Web/API/PromiseRejectionEvent)
+
+```js
+// (1)
+new Promise(function (resolve, reject) {
+  setTimeout(() => {
+    throw new Error('에러 발생!')
+  }, 1000)
+})
+  .then(() => console.log('then'))
+  .catch(() => console.error('error'))
+
+// (2)
+new Promise(function (resolve, reject) {
+  setTimeout(() => {
+    reject(new Error('error'))
+  }, 1000)
+})
+  .then(() => console.log('then!!'))
+  .catch(() => console.error('error!!'))
+```
+
+---
+
 ```js
 function fetchImage(url, callback) {
   var xmlHttp = new XMLHttpRequest()

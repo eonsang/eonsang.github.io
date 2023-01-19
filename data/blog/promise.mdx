@@ -1,10 +1,12 @@
 ---
-title: Promise 깊게 들여다보기
+title: Promise 들여다보기
 date: '2022-02-23'
 tags: ['자바스크립트', 'Promise', 'async-await', 'Thenable']
 draft: false
 summary: javascript Promise에 대해서 알아보자.
 ---
+
+import Diagram from '@/components/Diagram'
 
 프로미스에 대해서 깊게 한번 공부해보자.
 
@@ -58,6 +60,8 @@ fetchImage('https://picsum.photos/500', function (err, response) {
 
 이렇게 작성되는 코드를 개선하기위해 `Promise`가 등장하게 됩니다.
 
+---
+
 ## 프로미스란?
 
 `Promise`는 `'약속'`을 의미합니다.
@@ -67,69 +71,131 @@ fetchImage('https://picsum.photos/500', function (err, response) {
 
 위 상황에서 `Promise`는 **바로 처리할 수 없는 작업(비동기)** 에 사용되는 객체로, 최종 값을 즉시 반환하는 대신 작업이 완료되는 시점에 값을 제공하겠다는 `약속`을 반환합니다. _(pending)_
 
+---
+
 ## 프로미스의 동작 방식
 
-### 프로미스의 상태
+프로미스의 동작 방식을 이해하기 위해서는 두가지의 중요한 포인트가 있습니다.
 
-### Provider / Consumer
+1. 프로미스의 상태 <span style={{color: '#606060'}}>_(pending, fulfilled, rejected)_</span>
+2. Producer 와 Consumer <span style={{color: '#606060'}}>_(executor, then, catch, finally)_</span>
 
-### chaining 그리고 thenable
-
-### 에러 처리 방법
-
----
-
-PromiseState, PromiseResult
-
----
-
-아래 두 코드의 차이점에 대해서 설명
-
-```js
-// (1)
-promise.then(f1).catch(f2)
-// (2)
-promise.then(f1, f2)
-```
-
-- `promise`와 `f1`함수에서 에러가 발생하지 않으면 동일하게 동작한다.
-- `promise`에서 `reject`가 반환되면 `f2`가 실행되면서 동일하게 동작한다.
-- `f1`에서 에러가 발생할 경우, `(1)`에서는 `catch`에 잡혀서 `f2`가 실행되지만, `(2)`에서는 에러를 처리하지 못한다.
-
----
-
-아래 코드에서 `catch`는 `Error`를 잡아 낼 수 잇는가?
-
-- https://stackoverflow.com/questions/48969591/why-promise-can-not-catch-the-error-throw-by-settimeout
-- https://www.youtube.com/watch?v=8aGhZQkoFbQ
-- [rejectionhandled](https://developer.mozilla.org/en-US/docs/Web/API/Window/rejectionhandled_event)
-- [PromiseRejectionEvent](https://developer.mozilla.org/en-US/docs/Web/API/PromiseRejectionEvent)
+<Diagram
+  code={`
+flowchart LR
+  subgraph Producer
+    direction LR
+    P{pending} --resolve--> F[fulfilled]
+    P --reject--> R[rejected]
+    end
+  subgraph Consumer
+    direction LR
+    T1[then - 1] --> T2[Then - 2] --> Finally[Finally]
+    C[catch] --> Finally
+    end
+  F --> T1
+  T1 -.다시 던지기.-> C
+  R --> C
+  R -.-> T1
+  C -.-> T2
+  T1 -.에러 처리 완료시.-> Finally
+  
+`}
+/>
 
 ```js
-// (1)
-new Promise(function (resolve, reject) {
-  setTimeout(() => {
-    throw new Error('에러 발생!')
-  }, 1000)
-})
-  .then(() => console.log('then'))
-  .catch(() => console.error('error'))
+const promise = new Promise(
+  // Provider = executor
+  (resolve, reject) => {
+    setTimeout(() => {
+      // boolean이 true값이면, resolve가 실행되므로, 밑에 있는 reject는 무시 됩니다.
+      if (boolean) resolve(1) // Promise (<fullfilled>)
+      reject(new Error('error')) // Promise (<rejected>)
+    }, 500)
+  }
+)
+  // Consumer
+  .then(
+    // then - 1
+    (res) => {
+      return res * 2
+    },
+    (err) => {
+      throw err
+    }
+  )
+  .catch((err) => {
+    // catch
+    console.log(err.message)
+  })
+  .then((res) => {
+    // then - 2
+    return res ? res * 2 : 1
+  })
+  .finally(() => {
+    // finally
+    console.log('finally')
+  })
 
-// (2)
-new Promise(function (resolve, reject) {
-  setTimeout(() => {
-    reject(new Error('error'))
-  }, 1000)
-})
-  .then(() => console.log('then!!'))
-  .catch(() => console.error('error!!'))
+console.log(promise) // Promise (<pending>)
 ```
+
+위 다이어그램에서 나타나듯이, `Promise`의 **최초 상태** 는 `pending` 입니다.
+**boolean** 의 값이 **true** 가 되면, `resolve`가 실행되어 `Promise`의 상태가 `fulfilled`로 변경 됩니다. 반대로, **boolean** 값이 **false** 라고하면, `reject`가 실행되어, 상태는 `rejected`가 됩니다.
+
+`Promise`가 처리`(resolve / reject)`되고 나면, 상태가 `pending` 에서 `fulfilled / rejected`로 변경됩니다. 이렇게 상태가 변경되면,
+
+- **PromiseStatus: fulfilled**
+
+  - Promise가 resolve되면 가장 먼저 `체이닝`된 [`then`](https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/Promise/then) 혹은 [`finally`](https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/Promise/finally)가 실행 됩니다.
+  - `then`은 프로미스의 성공을 처리할 수 있는 첫번쨰 인자`(onFulfilled)`와 실패를 처리할 수 있는 두번쨰 인자`(onRejected)`를 받습니다.
+    - **onFulfilled**
+      - resolve가 실행되면 then의 첫 번째 인자인 onFulfilled 함수가 실행 됩니다. 이때 resolve 실행시 들어간 인자를 onFulfilled의 인자로 받아 처리 할 수 있습니다.
+      - 여기서 리턴된 값은 다음 `then`의 인자로 념어가게 됩니다.
+
+- **PromiseStatus: rejected**
+  - Promise가 reject되면 가장 먼저 `체이닝`되는 `(두번째 인자에 onRejected 함수가 있는) then` / [`catch`](https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/Promise/catch) / `finally` 를 실행합니다.
+    - **onRejected**
+      - reject가 실행되고 체이닝된 `then`에 두번째 인자인 onRejected 함수가 있으면 실행됩니다. onRejected 함수의 인자로 reject 실행시 들어간 인자를 받습니다.
+        이 때, 에러가 처리되면 다음 `then` 혹은 (없다면) `finally`으로 넘어갑니다. 만약 에러를 처리하지 못하면 다음 `catch`로 넘길 수 있는데, throw를 통해서 다시 에러를 발생시키면 됩니다. [(다시 던지기)](https://ko.javascript.info/promise-error-handling#ref-320)
+        - 만약 에러를 잡지 못하면, 전역스코프의 [unhandledrejection](https://developer.mozilla.org/en-US/docs/Web/API/Window/unhandledrejection_event) 이벤트가 발생하게 됩니다.
+
+### 상황 별 에러 처리 예제
+
+```js
+// 상황 1
+const promise = new Promise((resolve, reject) => reject(new Error('error')))
+const f1 = (response) => Promise.reject(Error('then Error'))
+const f2 = console.err
+
+promise.then(f1).catch(f2) // (1)
+promise.then(f1, f2) // (2)
+```
+
+- **[상황 1]** promise의 상태가 `rejected` 입니다. onResolve 함수인 `f1`은 실행되지 않습니다.
+
+  - (1): `catch`에 잡혀 `f2` 함수가 실행됩니다.
+  - (2): then의 두번째 인자인 onRejected 함수에 잡혀, `f2`가 실행 됩니다.
+
+```js
+// 상황 2
+const promise = new Promise((resolve, reject) => resolve(new Error('error')))
+const f1 = (response) => Promise.reject(Error('then Error'))
+const f2 = console.err
+
+promise.then(f1).catch(f2) // (1)
+promise.then(f1, f2) // (2)
+```
+
+- **[상황 2]** promise의 상태가 `fulfilled` 입니다.
+  - (1): 첫번째로 체이닝된 `then`으로 넘어가고 `f1` 함수가 실행됩니다. 여기서 `f1` 함수가 rejected를 반환하니, `catch`로 넘어가 `f2`에서 에러 처리를 하게 됩니다.
+  - (2): (1)과 동일하게 `then`으로 넘어가고 `f1` 함수가 실행됩니다. 여기서 에러가 발생하지만 이를 잡을 수 있는 `catch`가 없으므로 에러를 잡을 수 없습니다.
 
 ---
 
-### Promise API
+## Promise API
 
-#### # Promise.all
+### Promise.all
 
 `Promise.all`은 순서를 보장 하는가?
 
@@ -162,7 +228,7 @@ const myPromises = [
 Promise.all(myPromises).then(console.log)
 ```
 
-#### # Promise.allSettled
+### Promise.allSettled
 
 - Promise.all 을 사용하여 폴리필 만들어보기
 
@@ -171,21 +237,37 @@ Promise.all(myPromises).then(console.log)
 에러가 발생한 경우 – {status:"rejected", reason:error}
 ```
 
-#### # Promise.race
+### Promise.race
 
 Promise.race를 사용하면 '경주(race)의 승자’가 나타난 순간 다른 프라미스의 결과 또는 에러는 무시됩니다.
 
-#### # Promise.resolve
+### Promise.resolve
 
 ```js
 let promise = new Promise((resolve) => resolve(value))
 ```
 
-#### # Promise.reject
+### Promise.reject
 
 ```js
 let promise = new Promise((_, reject) => reject(value))
 ```
+
+### Promise.any
+
+- Promise.race와의 차이점
+
+---
+
+## 직접 만들어보기
+
+---
+
+## 기타 참고 내용
+
+### 마이크로테스크
+
+### Thenable
 
 ### 프로미스화
 
@@ -214,11 +296,7 @@ f = promisify(f, true);
 f(...).then(arrayOfResults => ..., err => ...)
 ```
 
-### 마이크로 테스트 큐 ( != 매크로 테스크 큐)
-
--
-
-## 직접 만들어보기
+---
 
 ## 참고 레퍼런스
 
@@ -227,6 +305,6 @@ f(...).then(arrayOfResults => ..., err => ...)
 - https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/Promise
 - https://dev.to/lydiahallie/javascript-visualized-promises-async-await-5gke
 - https://github.com/rauschma/demo_promise
-- https://joshua1988.github.io/web-development/javascript/promise-for-beginners/#%EC%8B%A4%EB%AC%B4%EC%97%90%EC%84%9C-%EC%9E%88%EC%9D%84-%EB%B2%95%ED%95%9C-%ED%94%84%EB%A1%9C%EB%AF%B8%EC%8A%A4-%EC%97%B0%EA%B2%B0-%EC%82%AC%EB%A1%80
 - https://velog.io/@teihong93/Promise-%EA%B5%AC%ED%98%84%ED%95%98%EA%B8%B0-1
+- https://2ality.com/2014/10/es6-promises-api.html
 - https://developer.mozilla.org/ko/docs/Web/JavaScript/Guide/Using_promises#see_also
