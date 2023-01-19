@@ -1,0 +1,232 @@
+---
+title: Promise 깊게 들여다보기
+date: '2022-02-23'
+tags: ['자바스크립트', 'Promise', 'async-await', 'Thenable']
+draft: false
+summary: javascript Promise에 대해서 알아보자.
+---
+
+프로미스에 대해서 깊게 한번 공부해보자.
+
+## 등장 배경
+
+아래와 같이 기능을 구현해야한다고 생각해봅시다.
+
+1. A서버에서 이미지를 조회합니다.
+2. 조회된 이미지를 압축합니다.
+3. 이미지를 저장합니다.
+
+3가지 기능 모두 비동기적으로 처리되는 기능들인데 동기적으로 처리하기 위해서는 어떻게 해야할까요?
+아래와 같이 각 함수들의 기능이 완료되면 성공여부를 체크해서 인자로 받은 `callback` 함수를 실행시켜야 합니다. _(1)_
+
+이러한 기능들이 많아질수록, `callback`의 깊이가 깊어지게 되고, 이를 `콜백지옥`이라고 합니다. _(2)_
+
+```js
+function fetchImage(url, callback) {
+  var xmlHttp = new XMLHttpRequest();
+
+  xmlHttp.onreadystatechange = function () {
+    if(xmlHttp.readyState === xmlHttp.DONE) {
+      if (this.status === 200 ) {
+        callback(null, this.response); // (1)
+      } else {
+        callback(new Error("실패")); // (1)
+      }
+    }
+  };
+  xmlHttp.open("GET", url)
+  xmlHttp.send();
+ }
+function compressImage(img, callback) {  ... }
+function saveImage(img, callback) {  ... }
+
+// 콜백 지옥
+fetchImage('https://picsum.photos/500', function (err, response) {
+  if (err) throw err;
+  compressImage(response, function (err, response) {
+    if (err) throw err;
+    saveImage(response, function (err, response) { // (2)
+      if (err) throw err;
+
+      // ...
+    })
+  })
+})
+```
+
+> 물론, 이러한 코드들도 써왔던 방식이고, 개선하는 방식들이 있습니다. [(참고 - Callback Hell)](http://callbackhell.com/)
+
+이렇게 작성되는 코드를 개선하기위해 `Promise`가 등장하게 됩니다.
+
+## 프로미스란?
+
+`Promise`는 `'약속'`을 의미합니다.
+
+자바스크립트는 싱글스레드로 **바로 처리할 수 없는 작업(비동기)** 에 대해서는 `Task`로 보내게 됩니다.
+`Call Stack`에 남은 작업이 없을 때, `Event Loop`는 `Task`에 쌓여있는 작업을 다시 `Call Stack`으로 보내며, 이 때, 작업이 실행되고 최종 결과를 반환합니다.
+
+위 상황에서 `Promise`는 **바로 처리할 수 없는 작업(비동기)** 에 사용되는 객체로, 최종 값을 즉시 반환하는 대신 작업이 완료되는 시점에 값을 제공하겠다는 `약속`을 반환합니다. _(pending)_
+
+## 프로미스의 동작 방식
+
+### 프로미스의 상태
+
+### Provider / Consumer
+
+### chaining 그리고 thenable
+
+### 에러 처리 방법
+
+---
+
+PromiseState, PromiseResult
+
+---
+
+아래 두 코드의 차이점에 대해서 설명
+
+```js
+// (1)
+promise.then(f1).catch(f2)
+// (2)
+promise.then(f1, f2)
+```
+
+- `promise`와 `f1`함수에서 에러가 발생하지 않으면 동일하게 동작한다.
+- `promise`에서 `reject`가 반환되면 `f2`가 실행되면서 동일하게 동작한다.
+- `f1`에서 에러가 발생할 경우, `(1)`에서는 `catch`에 잡혀서 `f2`가 실행되지만, `(2)`에서는 에러를 처리하지 못한다.
+
+---
+
+아래 코드에서 `catch`는 `Error`를 잡아 낼 수 잇는가?
+
+- https://stackoverflow.com/questions/48969591/why-promise-can-not-catch-the-error-throw-by-settimeout
+- https://www.youtube.com/watch?v=8aGhZQkoFbQ
+- [rejectionhandled](https://developer.mozilla.org/en-US/docs/Web/API/Window/rejectionhandled_event)
+- [PromiseRejectionEvent](https://developer.mozilla.org/en-US/docs/Web/API/PromiseRejectionEvent)
+
+```js
+// (1)
+new Promise(function (resolve, reject) {
+  setTimeout(() => {
+    throw new Error('에러 발생!')
+  }, 1000)
+})
+  .then(() => console.log('then'))
+  .catch(() => console.error('error'))
+
+// (2)
+new Promise(function (resolve, reject) {
+  setTimeout(() => {
+    reject(new Error('error'))
+  }, 1000)
+})
+  .then(() => console.log('then!!'))
+  .catch(() => console.error('error!!'))
+```
+
+---
+
+### Promise API
+
+#### # Promise.all
+
+`Promise.all`은 순서를 보장 하는가?
+
+- **요청 순서**에 대한 **응답 순서**는 보장한다.
+
+- https://stackoverflow.com/questions/28066429/promise-all-order-of-resolved-values
+
+```js
+const myPromises = [
+  new Promise((resolve) =>
+    setTimeout(() => {
+      resolve('A (slow)')
+      console.log('A (slow)')
+    }, 1000)
+  ),
+  new Promise((resolve) =>
+    setTimeout(() => {
+      resolve('B (slower)')
+      console.log('B (slower)')
+    }, 2000)
+  ),
+  new Promise((resolve) =>
+    setTimeout(() => {
+      resolve('C (fast)')
+      console.log('C (fast)')
+    }, 10)
+  ),
+]
+
+Promise.all(myPromises).then(console.log)
+```
+
+#### # Promise.allSettled
+
+- Promise.all 을 사용하여 폴리필 만들어보기
+
+```
+응답이 성공할 경우 – {status:"fulfilled", value:result}
+에러가 발생한 경우 – {status:"rejected", reason:error}
+```
+
+#### # Promise.race
+
+Promise.race를 사용하면 '경주(race)의 승자’가 나타난 순간 다른 프라미스의 결과 또는 에러는 무시됩니다.
+
+#### # Promise.resolve
+
+```js
+let promise = new Promise((resolve) => resolve(value))
+```
+
+#### # Promise.reject
+
+```js
+let promise = new Promise((_, reject) => reject(value))
+```
+
+### 프로미스화
+
+```js
+function promisify(f, manyArgs = false) {
+  return function (...args) {
+    return new Promise((resolve, reject) => {
+      function callback(err, ...results) { // f에 사용할 커스텀 콜백
+        if (err) {
+          reject(err);
+        } else {
+          // manyArgs가 구체적으로 명시되었다면, 콜백의 성공 케이스와 함께 이행 상태가 됩니다.
+          resolve(manyArgs ? results : results[0]);
+        }
+      }
+
+      args.push(callback);
+
+      f.call(this, ...args);
+    });
+  };
+};
+
+// 사용법:
+f = promisify(f, true);
+f(...).then(arrayOfResults => ..., err => ...)
+```
+
+### 마이크로 테스트 큐 ( != 매크로 테스크 큐)
+
+-
+
+## 직접 만들어보기
+
+## 참고 레퍼런스
+
+- http://callbackhell.com/
+- https://ko.javascript.info/async
+- https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/Promise
+- https://dev.to/lydiahallie/javascript-visualized-promises-async-await-5gke
+- https://github.com/rauschma/demo_promise
+- https://joshua1988.github.io/web-development/javascript/promise-for-beginners/#%EC%8B%A4%EB%AC%B4%EC%97%90%EC%84%9C-%EC%9E%88%EC%9D%84-%EB%B2%95%ED%95%9C-%ED%94%84%EB%A1%9C%EB%AF%B8%EC%8A%A4-%EC%97%B0%EA%B2%B0-%EC%82%AC%EB%A1%80
+- https://velog.io/@teihong93/Promise-%EA%B5%AC%ED%98%84%ED%95%98%EA%B8%B0-1
+- https://developer.mozilla.org/ko/docs/Web/JavaScript/Guide/Using_promises#see_also

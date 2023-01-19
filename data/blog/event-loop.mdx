@@ -1,0 +1,43 @@
+---
+title: 자바스크립트 이벤트 루프
+date: '2022-02-23'
+tags: ['javascript', 'event-loop']
+draft: true
+summary: 자바스크립트의 이벤트 루프에 대해 알아보고, 동작 원리를 이해하자.
+---
+
+## 참고 코드를
+
+```js
+function fetchImage(url, callback) {
+  var xmlHttp = new XMLHttpRequest()
+
+  xmlHttp.onreadystatechange = function () {
+    if (xmlHttp.readyState === xmlHttp.DONE) {
+      if (this.status === 200) {
+        callback(null, this.response) // (1)
+      } else {
+        callback(new Error('실패')) // (1)
+      }
+    }
+  }
+  xmlHttp.open('GET', url)
+  xmlHttp.send()
+}
+undefined
+function handlePhoto(error, photo) {
+  if (error) console.error('Download error!', error)
+  else console.log('Download finished', photo)
+}
+
+undefined
+fetchImage('https://picsum.photos/500', handlePhoto)
+console.log('started')
+```
+
+## 참고 레퍼런스
+
+- [loupe](http://latentflip.com/loupe)
+- [queueMicrotask](https://www.freecodecamp.org/news/queuemicrotask/)
+- https://kay0426.tistory.com/25
+- https://dev.to/lydiahallie/javascript-visualized-event-loop-3dif
