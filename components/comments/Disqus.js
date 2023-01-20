@@ -1,4 +1,4 @@
-import React, { useState } from 'react'
+import React, { useEffect, useState } from 'react'
 
 import siteMetadata from '@/data/siteMetadata'
 
@@ -6,6 +6,12 @@ const Disqus = ({ frontMatter }) => {
   const [enableLoadComments, setEnabledLoadComments] = useState(true)
 
   const COMMENTS_ID = 'disqus_thread'
+
+  useEffect(() => {
+    setTimeout(() => {
+      LoadComments()
+    })
+  }, [])
 
   function LoadComments() {
     setEnabledLoadComments(false)
@@ -28,7 +34,7 @@ const Disqus = ({ frontMatter }) => {
 
   return (
     <div className="pt-6 pb-6 text-center text-gray-700 dark:text-gray-300">
-      {enableLoadComments && <button onClick={LoadComments}>Load Comments</button>}
+      {/* {enableLoadComments && <button onClick={LoadComments}>Load Comments</button>} */}
       <div className="disqus-frame" id={COMMENTS_ID} />
     </div>
   )

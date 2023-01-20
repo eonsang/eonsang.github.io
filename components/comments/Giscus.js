@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from 'react'
+import React, { useState, useEffect, useCallback, useLayoutEffect } from 'react'
 import { useTheme } from 'next-themes'
 
 import siteMetadata from '@/data/siteMetadata'
@@ -55,9 +55,10 @@ const Giscus = () => {
   }, [commentsTheme])
 
   // Reload on theme change
-  useEffect(() => {
+  useLayoutEffect(() => {
     const iframe = document.querySelector('iframe.giscus-frame')
-    if (!iframe) return
+    if (iframe) return
+
     LoadComments()
   }, [LoadComments])
 
