@@ -1,7 +1,7 @@
 const siteMetadata = {
-  title: 'lee-eonsang.com',
+  title: '이언상.blog',
   author: '이언상',
-  headerTitle: '이언상.blog',
+  headerTitle: 'lee-eonsang.com',
   description: '학습한 내용이나 생각을 정리합니다.',
   language: 'ko-KR',
   theme: 'system', // system, dark or light
