@@ -1,6 +1,7 @@
 const siteMetadata = {
   title: '이언상.blog',
   author: '이언상',
+  avatar: 'https://avatars.githubusercontent.com/u/32788900?v=4',
   headerTitle: 'lee-eonsang.com',
   description: '학습한 내용이나 생각을 정리합니다.',
   language: 'ko-KR',
@@ -8,7 +9,7 @@ const siteMetadata = {
   siteUrl: 'https://lee-eonsang.com',
   siteRepo: '',
   siteLogo: '/static/images/logo.png',
-  socialBanner: '/static/images/twitter-card.png',
+  socialBanner: '',
   email: '2eonhworking@gmail.com',
   github: 'https://github.com/eonsang',
   twitter: '',
