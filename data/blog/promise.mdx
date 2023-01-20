@@ -1,0 +1,396 @@
+---
+title: Promise 들여다보기
+date: '2022-02-23'
+tags: ['자바스크립트', 'Promise', 'async-await', 'Thenable']
+draft: false
+summary: javascript Promise에 대해서 알아보자.
+---
+
+import Diagram from '@/components/Diagram'
+
+프로미스에 대해서 깊게 한번 공부해보자.
+
+## 등장 배경
+
+아래와 같이 기능을 구현해야한다고 생각해봅시다.
+
+1. A서버에서 이미지를 조회합니다.
+2. 조회된 이미지를 압축합니다.
+3. 이미지를 저장합니다.
+
+3가지 기능 모두 비동기적으로 처리되는 기능들인데 동기적으로 처리하기 위해서는 어떻게 해야할까요?
+아래와 같이 각 함수들의 기능이 완료되면 성공여부를 체크해서 인자로 받은 `callback` 함수를 실행시켜야 합니다. _(1)_
+
+이러한 기능들이 많아질수록, `callback`의 깊이가 깊어지게 되고, 이를 `콜백지옥`이라고 합니다. _(2)_
+
+```js
+function fetchImage(url, callback) {
+  var xmlHttp = new XMLHttpRequest();
+
+  xmlHttp.onreadystatechange = function () {
+    if(xmlHttp.readyState === xmlHttp.DONE) {
+      if (this.status === 200 ) {
+        callback(null, this.response); // (1)
+      } else {
+        callback(new Error("실패")); // (1)
+      }
+    }
+  };
+  xmlHttp.open("GET", url)
+  xmlHttp.send();
+ }
+function compressImage(img, callback) {  ... }
+function saveImage(img, callback) {  ... }
+
+// 콜백 지옥
+fetchImage('https://picsum.photos/500', function (err, response) {
+  if (err) throw err;
+  compressImage(response, function (err, response) {
+    if (err) throw err;
+    saveImage(response, function (err, response) { // (2)
+      if (err) throw err;
+
+      // ...
+    })
+  })
+})
+```
+
+> 물론, 이러한 코드들도 써왔던 방식이고, 개선하는 방식들이 있습니다. [(참고 - Callback Hell)](http://callbackhell.com/)
+
+이렇게 작성되는 코드를 개선하기위해 `Promise`가 등장하게 됩니다.
+
+---
+
+## 프로미스란?
+
+`Promise`는 `'약속'`을 의미합니다.
+
+자바스크립트는 싱글스레드로 **바로 처리할 수 없는 작업(비동기)** 에 대해서는 `Task`로 보내게 됩니다.
+`Call Stack`에 남은 작업이 없을 때, `Event Loop`는 `Task`에 쌓여있는 작업을 다시 `Call Stack`으로 보내며, 이 때, 작업이 실행되고 최종 결과를 반환합니다.
+
+위 상황에서 `Promise`는 **바로 처리할 수 없는 작업(비동기)** 에 사용되는 객체로, 최종 값을 즉시 반환하는 대신 작업이 완료되는 시점에 값을 제공하겠다는 `약속`을 반환합니다. _(pending)_
+
+---
+
+## 프로미스의 동작 방식
+
+프로미스의 동작 방식을 이해하기 위해서는 두가지의 중요한 포인트가 있습니다.
+
+1. 프로미스의 상태 _(pending, fulfilled, rejected)_
+2. Producer 와 Consumer _(executor, then, catch, finally)_
+
+<Diagram
+  code={`
+flowchart LR
+  subgraph Producer
+    direction LR
+    P{pending} --resolve--> F[fulfilled]
+    P --reject--> R[rejected]
+    end
+  subgraph Consumer
+    direction LR
+    T1[then - 1] --> T2[Then - 2] --> Finally[Finally]
+    C[catch] --> Finally
+    end
+  F --> T1
+  T1 -.다시 던지기.-> C
+  R --> C
+  R -.-> T1
+  C -.-> T2
+  T1 -.에러 처리 완료시.-> T2
+  
+`}
+/>
+
+```js
+const promise = new Promise(
+  // Provider = executor
+  (resolve, reject) => {
+    setTimeout(() => {
+      // boolean이 true값이면, resolve가 실행되므로, 밑에 있는 reject는 무시 됩니다.
+      if (boolean) resolve(1) // Promise (<fulfilled>)
+      reject(new Error('error')) // Promise (<rejected>)
+    }, 500)
+  }
+)
+  // Consumer
+  .then(
+    // then - 1
+    (res) => {
+      return res * 2
+    },
+    (err) => {
+      throw err
+    }
+  )
+  .catch((err) => {
+    // catch
+    console.log(err.message)
+  })
+  .then((res) => {
+    // then - 2
+    return res ? res * 2 : 1
+  })
+  .finally(() => {
+    // finally
+    console.log('finally')
+  })
+
+console.log(promise) // Promise (<pending>)
+```
+
+위 다이어그램에서 나타나듯이, `Promise`의 **최초 상태** 는 `pending` 입니다.
+**boolean** 의 값이 **true** 가 되면, `resolve`가 실행되어 `Promise`의 상태가 `fulfilled`로 변경 됩니다. 반대로, **boolean** 값이 **false** 라고하면, `reject`가 실행되어, 상태는 `rejected`가 됩니다.
+
+`Promise`가 처리`(resolve / reject)`되고 나면, 상태가 `pending` 에서 `fulfilled / rejected`로 변경됩니다. 이렇게 상태가 변경되면,
+
+- **PromiseStatus: fulfilled**
+
+  - Promise가 resolve되면 가장 먼저 `체이닝`된 [`then`](https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/Promise/then) 혹은 [`finally`](https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/Promise/finally)가 실행 됩니다.
+  - `then`은 프로미스의 성공을 처리할 수 있는 첫번쨰 인자`(onFulfilled)`와 실패를 처리할 수 있는 두번쨰 인자`(onRejected)`를 받습니다.
+    - **onFulfilled**
+      - resolve가 실행되면 then의 첫 번째 인자인 onFulfilled 함수가 실행 됩니다. 이때 resolve 실행시 들어간 인자를 onFulfilled의 인자로 받아 처리 할 수 있습니다.
+      - 여기서 리턴된 값은 다음 `then`의 인자로 념어가게 됩니다.
+
+- **PromiseStatus: rejected**
+  - Promise가 reject되면 가장 먼저 `체이닝`되는 `(두번째 인자에 onRejected 함수가 있는) then` / [`catch`](https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/Promise/catch) / `finally` 를 실행합니다.
+    - **onRejected**
+      - reject가 실행되고 체이닝된 `then`에 두번째 인자인 onRejected 함수가 있으면 실행됩니다. onRejected 함수의 인자로 reject 실행시 들어간 인자를 받습니다.
+        이 때, 에러가 처리되면 다음 `then` 혹은 (없다면) `finally`으로 넘어갑니다. 만약 에러를 처리하지 못하면 다음 `catch`로 넘길 수 있는데, throw를 통해서 다시 에러를 발생시키면 됩니다. [(다시 던지기)](https://ko.javascript.info/promise-error-handling#ref-320)
+        - 만약 에러를 잡지 못하면, 전역스코프의 [unhandledrejection](https://developer.mozilla.org/en-US/docs/Web/API/Window/unhandledrejection_event) 이벤트가 발생하게 됩니다.
+
+### 상황 별 에러 처리 예제
+
+```js
+// 상황 1
+const promise = new Promise((resolve, reject) => reject(new Error('error')))
+const f1 = (response) => Promise.reject(Error('then Error'))
+const f2 = console.err
+
+promise.then(f1).catch(f2) // (1)
+promise.then(f1, f2) // (2)
+```
+
+- **[상황 1]** promise의 상태가 `rejected` 입니다. onResolve 함수인 `f1`은 실행되지 않습니다.
+
+  - (1): `catch`에 잡혀 `f2` 함수가 실행됩니다.
+  - (2): then의 두번째 인자인 onRejected 함수에 잡혀, `f2`가 실행 됩니다.
+
+```js
+// 상황 2
+const promise = new Promise((resolve, reject) => resolve(new Error('error')))
+const f1 = (response) => Promise.reject(Error('then Error'))
+const f2 = console.err
+
+promise.then(f1).catch(f2) // (1)
+promise.then(f1, f2) // (2)
+```
+
+- **[상황 2]** promise의 상태가 `fulfilled` 입니다.
+  - (1): 첫번째로 체이닝된 `then`으로 넘어가고 `f1` 함수가 실행됩니다. 여기서 `f1` 함수가 rejected를 반환하니, `catch`로 넘어가 `f2`에서 에러 처리를 하게 됩니다.
+  - (2): (1)과 동일하게 `then`으로 넘어가고 `f1` 함수가 실행됩니다. 여기서 에러가 발생하지만 이를 잡을 수 있는 `catch`가 없으므로 에러를 잡을 수 없습니다.
+
+---
+
+## Promise API
+
+### Promise.all
+
+**기본 사용 방법**
+
+```js
+const promise = new Promise((resolve) => resolve(1))
+
+// Promise.all 의 인자로는 배열(이터러블)이 들어갑니다.
+Promise.all([promise, 2, 3, 4]).then((res) => {
+  return res // [1,2,3,4]
+})
+```
+
+`Promise.all`은 주어진 배열의 모든 값(promise 혹은 일반 값)을 `병렬`로 이행한 후, `Promise`를 반환합니다.
+
+성공 시 반환되는 PromiseResult는 완료되는 순서와 상관 없이 인자로 주어진 프로미스의 순서와 일치합니다.
+
+만약 Promise.all이 배열을 순회하면서 **거부(reject)**가 발생하게 되면, 바로(다른 promise들이 끝나지 않아도) 상태가 `rejected`로 변경되고 바로 catch로 넘어갑니다. _다른 promise에서 에러가 발생하더라도 확인 불가능_
+
+- 바로 return 되지만, 내부에서 수행되고 있는 Promise들은 끝까지 진행됩니다. _(\*Promise.all의 순서 보장 확인)_
+
+> 위 코드의 경우 PromiseStatus:fulfilled, PromiseResult: [1,2,3,4]
+
+**매개 변수에 따른 Promise.all의 처리 방식**
+
+- Promise.all의 매개변수가 빈 배열일 경우, 즉시 `이행 상태(fulfilled)`로 리턴됩니다.
+- 배열에 Promise가 아닌 값이 들어오면, 무시하지만 우선 `비동기(pending)`로 실행됩니다. _마이크로테스크로 이동_
+
+```js
+var p = Promise.all([])
+var p2 = Promise.all([1337, 'hi'])
+console.log(p) // status: fulfilled, value: Array[]
+console.log(p2) // status: pending
+setTimeout(function () {
+  console.log(p2) // status: fulfilled, value: Array[2]
+})
+```
+
+#### Promise.all의 순서 보장
+
+Promise.all 의 매개변수로 들어온 배열의 순서대로 리턴되는 배열의 순서는 정렬됩니다. ( 처리순서가 보장되지 않습니다. [[index]]를 통해서 구현됩니다. - [(참고)][https://tc39.es/ecma262/#sec-promise.all-resolve-element-functions] )
+주의 할 점은, 매개변수로 들어온 Promise 배열이 차례대로 실행되는지는 보장하지 않습니다. _(iterable 객체면 next를 통해서 실행되는데, 순서대로 실행되어야하지 않나?)_
+
+```js
+const myPromises = [
+  new Promise((resolve) =>
+    setTimeout(() => {
+      resolve('A (slow)')
+      console.log('A (slow)')
+    }, 1000)
+  ),
+  new Promise((resolve) =>
+    setTimeout(() => {
+      resolve('B (slower)')
+      console.log('B (slower)')
+    }, 2000)
+  ),
+  new Promise((resolve) =>
+    setTimeout(() => {
+      resolve('C (fast)')
+      console.log('C (fast)')
+    }, 10)
+  ),
+]
+
+Promise.all(myPromises).then(console.log)
+
+// 출력
+// C(fast)
+// A (slow)
+// B (slower)
+// A(slow), B(slower), C(fast)
+```
+
+### Promise.allSettled
+
+`all settled`는 **모두 해결됨**을 의미합니다. Promise에서 해결이라하면 fulfilled를 생각할 수 있습니다. 예상한대로, allSettled는 매개변수로 들어온 프로미스들이 에러를 발생하더라도 `then`에서 처리합니다.
+
+그렇다면 then에서 어떻게 결과값들을 처리할 수 있을까요? 여기서 `all`과의 가장 큰 차이점을 확인 할 수 있습니다. 위에서 설명한대로, `all`은 resolve된 응답들의 배열 혹은 **가장 먼저 발생된 에러**를 리턴하는데, `allSettled`는 매개변수로 들어오느 모든 **promise**들이 처리(resolve or reject)된 뒤에 아래와 같은 형식으로 응답합니다.
+
+```js
+const promise1 = Promise.resolve(3)
+const promise2 = new Promise((resolve, reject) => reject('error'))
+const promises = [promise1, promise2]
+
+Promise.allSettled(promises).then((results) => console.log(results))
+// [
+//   { status: 'fulfilled', value: 3 },
+//   { status: 'rejected', reason: 'error' },
+// ]
+```
+
+위 예제에서 알수 있듯이 `resolve`되어 상태가 fulfilled 되면 value를, `reject`되어 rejected 상태라면 reason 속성을 갖습니다. 이를 통해, 각각의 `promise`들이 성공했는지 혹은 실패했는지 확인하고, 결과에 따라 프로세스를 추가할 수 있습니다.
+
+아래 코드를 보면, Promise.all과 Promise.allSettled의 차이를 확인 할 수 있습니다.
+
+```js
+Promise._allSetteld = (promises) => {
+  return Promise.all(
+    promises.map((promise) => {
+      return Promise.resolve(promise) // 프로미스가 아닌 값이 들어왔을때, 프로미스화 시키기 위해
+        .then(
+          (value) => ({
+            status: 'fulfilled',
+            value,
+          }),
+          // 에러 던지기를 하지않고, 리턴합니다.
+          (reason) => ({
+            status: 'rejected',
+            reason,
+          })
+        )
+    })
+  )
+}
+```
+
+### Promise.race
+
+`race` 에서 알 수 있듯이, 매개변수로 들어간 Promise들 중에 가장 먼저 이행 혹은 거부 되는 promise를 리턴합니다.
+
+만약 매개변수의 값이 빈 배열이면 all, allSettled와 다르게 `pending` 상태의 Promise를 반환합니다. _아직 경주가 시작 안됐다고 생각_
+
+매개변수로 이미 완료된 프로미스가 여러개 있을 경우, 완료된 프로미스들 중에 index가 작은 Promise의 결과값을 리턴합니다.
+
+#### Promise.race 사용 예제
+
+Promise.race는 어떤 상황에 쓸 수 있을까요? 아래와 같은 상황이 있다고 가정해 봅시디.
+
+1. 32번 게시글을 조회합니다.
+2. 게시글은 DB에도 저장되어있고, Cache에도 저장되어 있습니다. _당연히 cache에서 가져오겠지만, 비슷하게 처리된다고 가정하고_
+3. 5초안에 조회가 안되면 오류 화면을 보여줍니다.
+
+이런 상황을 정리하면 `3초 안에 DB 혹은 Cache에서 게시글을 조회해야한다` 입니다.
+
+코드로 옮겨 봅시다.
+
+```js
+Promise.race([
+  // DB 조회
+  new Promise((resolve) => {
+    const data = ... // DB 조회 로직
+    resolve(data)
+  }).catch(console.error),
+  // Cache 조회
+  new Promise((resolve) => {
+    const data = ...  // Cache 조회 로직
+    resolve(data)
+  }).catch(console.error),
+  // 5초 후 timeout
+  new Promise((_, reject) => setTimeout(reject, 5000, 'timeout'))
+])
+```
+
+- 첫번째 Promise는 DB에서 조회하는 로직이 들어가고,
+- 두번째 Promise는 Cache에서 조회하는 로직이 들어갑니다.
+- 세번째 Promise는 5초뒤에 reject를 리턴합니다.
+
+DB든 Cache든 5초 안에 값이 먼저 조회되면 그 값이 resolve되고 `race`의 응답값이 되어, 32번 글을 볼 수 있게 됩니다.
+
+### Promise.any
+
+Promise.any는 race와 비슷한데, 차이점은 이행(resolve)든 거부(reject)든 `가장 먼저 처리된 promise를 반환`합니다.
+
+### Promise.resolve
+
+Promise.resolve는 이행된(fulfilled) `Promise`를 반환합니다.
+
+```js
+let promise1 = new Promise((resolve) => resolve('resolved')) // Promise <fulfiled, 'resolved'>
+let promise2 = Promise.resolve('resolved') // Promise <fulfiled, 'resolved'>
+```
+
+### Promise.reject
+
+Promise.reject는 거부된(rejected) `Promise`를 반환합니다.
+
+```js
+let promise1 = new Promise((_, reject) => reject('rejected'))
+let promise2 = Promise.reject('rejected')
+```
+
+---
+
+## 직접 만들어보기
+
+---
+
+## 참고 레퍼런스
+
+- http://callbackhell.com/
+- https://ko.javascript.info/async
+- https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/Promise
+- https://dev.to/lydiahallie/javascript-visualized-promises-async-await-5gke
+- https://github.com/rauschma/demo_promise
+- https://velog.io/@teihong93/Promise-%EA%B5%AC%ED%98%84%ED%95%98%EA%B8%B0-1
+- https://2ality.com/2014/10/es6-promises-api.html
+- https://developer.mozilla.org/ko/docs/Web/JavaScript/Guide/Using_promises#see_also
+- https://stackoverflow.com/questions/28066429/promise-all-order-of-resolved-values
