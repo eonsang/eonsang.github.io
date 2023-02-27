@@ -1,7 +1,265 @@
 ---
-title: Nestjs에서 파일 업로드하는 방법 2편 - presigned url
+title: Nestjs에서 파일 업로드하는 방법 2편 - presigned url(with. presigned post)
 date: '2023-02-26'
 tags: ['nestjs', 'presigned url', 'file upload', 's3']
-draft: true
+draft: false
 summary: Nestjs 환경에서 presigned url을 통해, S3에 파일 업로드하는 방법을 정리합니다.
 ---
+
+multer에 이어 이번에는 `presigned url`을 통해서 S3에 파일 업로드 하는 방법을 알아보겠습니다.
+
+## presigned url 이란?
+
+기본 적인 S3 설정은 [이전편 (Nestjs에서 파일 업로드하는 방법 1편 - multer)](./fileupload-with-multer)에서 알아봤으니, 바로 코드로 넘어가겠습니다.
+
+presigned url을 사용하기위해 관련 패키지를 설치합니다.
+
+[@aws-sdk/s3-request-presigner](https://www.npmjs.com/package/@aws-sdk/s3-request-presigner)
+
+```
+npm install @aws-sdk/s3-request-presigner
+```
+
+아래 코드와 같이 간단히 presigned url을 생성할 수 있습니다.
+
+```js
+import { getSignedUrl } from '@aws-sdk/s3-request-presigner'
+
+const url = await getSignedUrl(client, command, {
+  expiresIn: 3600,
+})
+```
+
+- `client`는 이전편에서 설명한 s3Client입니다.
+
+```ts
+import { S3Client } from '@aws-sdk/client-s3'
+
+const client = new S3Client({
+  region: this.configService.get('AWS_REGION'),
+  credentials: {
+    accessKeyId: this.configService.get('AWS_S3_ACCESS_KEY'),
+    secretAccessKey: this.configService.get('AWS_S3_SECRET_ACCESS_KEY'),
+  },
+})
+```
+
+- `command`는 어떤 작업에 대한 url을 생성할건지에 대한 내용이 들어있습니다.
+
+이번 포스팅에서는 이미지 등록에 대해 권한이 있는 url이 필요하므로, `PutObjectCommand`를 통해 command를 생성하도록 하겠습니다.
+
+```ts
+import { PutObjectCommand } from '@aws-sdk/client-s3'
+
+const command = new PutObjectCommand({
+  Bucket: this.configService.get('AWS_S3_BUCKET'),
+  Key: filename,
+  ContentType: type, // 발급된 presigned url을 저장할 수 있는 파일 타입
+  Expires: date, // Date type의 만료 시간 지정
+})
+```
+
+PutObjectCommand의 인자로는 command 생성시 필요한 옵션을 추가해야합니다. 필수조건에는 `Bucket`, `Key`가 있습니다.
+
+`Bucket`은 s3 bucket명입니다. 당연히 access key에 권한이 잇는 bucket이어야겠죠? `key`는 파일이 저장되는 이름입니다. 만약 폴더 내에 넣고싶으면 '/app/hello.png' 와 같이 넣어도 됩니다.
+
+그 외에 `ContentType`, `ContentLength`, `ACL`, `Expires`와 같은 값으로 presigned url로 저장 요청되는 파일들을 제어할 수 있습니다.
+그 외 다양한 옵션이 있으니, [링크 - PutObjectRequest](https://github.com/aws/aws-sdk-js-v3/blob/79aa5963455320286ec1464e49584c20bcd27980/clients/client-s3/src/models/models_0.ts#L9826)에서 확인 가능합니다.
+
+그럼 이제 실제로 잘 작동하는지 테스트를 해보겠습니다. 먼저 코드를 먼저 보면 아래와 같습니다.
+
+```ts
+import { Body, Controller, Post } from '@nestjs/common'
+import { S3Client, PutObjectCommand } from '@aws-sdk/client-s3'
+import { ConfigService } from '@nestjs/config'
+import { getSignedUrl } from '@aws-sdk/s3-request-presigner'
+
+@Controller('presignurl')
+export class PresignurlController {
+  constructor(private configService: ConfigService) {}
+
+  @Post('/')
+  async presign(@Body('filename') filename: string, @Body('type') type: string) {
+    const client = new S3Client({
+      region: this.configService.get('AWS_REGION'),
+      credentials: {
+        accessKeyId: this.configService.get('AWS_S3_ACCESS_KEY'),
+        secretAccessKey: this.configService.get('AWS_S3_SECRET_ACCESS_KEY'),
+      },
+    })
+
+    const date = new Date()
+    date.setMinutes(date.getMinutes() + 1)
+    const command = new PutObjectCommand({
+      Bucket: this.configService.get('AWS_S3_BUCKET'),
+      Key: filename,
+      ContentType: type,
+      Expires: date,
+    })
+
+    return await getSignedUrl(client, command)
+  }
+}
+```
+
+`presign`이라는 메소드는 filename 필드와, 파일의 type을 바디 값으로 받습니다.
+
+![img1](/static/blog/fileupload-with-presignedurl-1.png)
+
+위 샘플에서는 filename을 abc.png, type을 image/png로 입력하고 요청을 전달했습니다. 응답으로 엄청 긴 url이 나왔는데요, 한번 알아보도록 하겠습니다.
+
+```
+https://s3-upload-with-nestjs.s3.ap-northeast-2.amazonaws.com/abc.png?X-Amz-Algorithm=AWS4-HMAC-SHA256&X-Amz-Content-Sha256=UNSIGNED-PAYLOAD&X-Amz-Credential=AKIAWW3EB3Y6QS2UTYHC%2F20230227%2Fap-northeast-2%2Fs3%2Faws4_request&X-Amz-Date=20230227T044337Z&X-Amz-Expires=900&X-Amz-Signature=7751b643506b568e40ec2049b532ded2e1967328bd045f0733f0e531bb689175&X-Amz-SignedHeaders=content-length%3Bexpires%3Bhost&x-id=PutObject
+```
+
+![img2](/static/blog/fileupload-with-presignedurl-2.png)
+
+해당 URL의 해더 정보를 보면 다양한 queryparam 이 있습니다. 각 key들에 대한 내용은 아래와 같습니다. [(참고)](https://aws.amazon.com/ko/blogs/korea/aws-api-call-2-s3-pre-signed-url/)
+
+- X-Amz-Algorithm: 서명 버전과 알고리즘을 식별하고, 서명을 계산하는데 사용. 서명 버전 4를 위해서 “AWS4-HMAC-SHA256” 로 설정
+- X-Amz-Credential: 액세스 키 ID와 범위 정보(요청 날짜, 사용하는 리전, 서비스 명). 리전 명은 리전 및 엔드포인트에서 확인 가능
+- X-Amz-Date: 날짜는 ISO 8601형식. 예: 20160115T000000Z
+- X-Amz-Expires: 미리 선언된 URL이 유효한 시간 주기. 초단위. 정수 값. 최소 1에서 최대 604800 (7일) 예: 86400 (24시간)
+- X-Amz-Signature: 요청을 인증하기 위한 서명
+- X-Amz-SignedHeaders: 서명을 계산하기 위해 사용되어지는 헤더 목록. HTTP host 헤더가 요구됨
+
+이제 해당 url에 요청을 보내보겠습니다.
+
+먼저 위에 응답받은 url을 통해 파일을 저장해 보겠습니다.
+
+- body에 key값을 `file`로 지정한 후, multipart/form-data 타입으로 요청해야합니다.
+
+![img3](/static/blog/fileupload-with-presignedurl-3.png)
+
+만료시간이 지났다고 나오네요! url을 다시 한번 발급받고 진행해보도록 하겠습니다.
+
+![img4](/static/blog/fileupload-with-presignedurl-4.png)
+
+이번에는 `200 OK` 응답이 왔네요. S3 버킷에 들어가서 파일이 잘 등록되었는지 확인해보겠습니다.
+
+![img5](/static/blog/fileupload-with-presignedurl-5.png)
+
+파일도 정상적으로 등록된 것을 확인할 수 있습니다.
+
+---
+
+## presigned post
+
+이전 1편에서 S3에 있는 파일을 삭제하려면, `bucket`명과 `key`가 필요했었습니다.
+
+bucket명은 크게 문제가 없는데, presigned url을 사용했을때, key는 어떻게 알 수 있을까요??
+
+위 리턴된 url을 자세하게보면 `path 부분이 key` 인 것을 확인할 수 있는데요.
+
+```
+// key = abc.png
+https://s3-upload-with-nestjs.s3.ap-northeast-2.amazonaws.com/abc.png?X-Amz...
+```
+
+이런 긴 url을 프론트에 주는 방식보다 객체형식으로 프론트에서 좀 더 편하게 알아 볼 수 있는 값을 넘겨주고 싶었습니다.
+
+url을 규칙에 맞게 잘라서 넘기는 방법이 먼저 생각났고, 다른 방법을 찾아보니 `presigned post`라는 것을 알게 됐습니다.
+
+바로 코드로 알아보겠습니다.
+
+우선 패키지를 설치합니다.
+
+[@aws-sdk/s3-presigned-post](https://www.npmjs.com/package/@aws-sdk/s3-presigned-post)
+
+```
+npm install @aws-sdk/s3-presigned-post;
+```
+
+```ts
+import { createPresignedPost } from '@aws-sdk/s3-presigned-post'
+
+const result = await createPresignedPost(client, {
+  Bucket: this.configService.get('AWS_S3_BUCKET'),
+  Key: filename,
+  Expires: 600,
+  Conditions: [
+    ['content-length-range', 0, 50 * 1024 ** 2],
+    ['starts-with', '$Content-Type', 'image/'],
+  ],
+})
+```
+
+`createPresignedPost`의 첫번쨰 인자로, presigned url에서와 동일하게 S3Client를 넣습니다. 두번째 인자로 presignedPost에 대한 옵션을 넣습니다.
+옵션에 대한 정보는 아래와 같습니다.
+
+- Bucket: s3 해당 버킷명
+- Key: bucket에 등록할 파일 명(위와 동일하게 폴대 내에 넣으려면 `raw/${filename}` 과 같은 형식으로 가능합니다.)
+- Expires: 해당 url의 만료 기간
+- Conditions: 파일의 사이즈 content-length-range, 컨텐츠 타입과 같은 조건 지정
+
+```ts
+@Post('/post')
+  async presignPost(
+    @Body('filename') filename: string,
+    @Body('type') type: string,
+  ) {
+    const client = new S3({
+      region: this.configService.get('AWS_REGION'),
+      credentials: {
+        accessKeyId: this.configService.get('AWS_S3_ACCESS_KEY'),
+        secretAccessKey: this.configService.get('AWS_S3_SECRET_ACCESS_KEY'),
+      },
+    });
+
+    return await createPresignedPost(client, {
+      Bucket: this.configService.get('AWS_S3_BUCKET'),
+      Key: filename,
+      Conditions: [
+        ['content-length-range', 0, 50 * 1024 ** 2],
+        ['starts-with', '$Content-Type', 'image/'],
+      ],
+      Expires: 600,
+    });
+  }
+
+```
+
+코드를 바로 실행 해 보겠습니다.
+
+![img6](/static/blog/fileupload-with-presignedurl-6.png)
+
+```json
+{
+  "url": "https://s3-upload-with-nestjs.s3.ap-northeast-2.amazonaws.com/",
+  "fields": {
+    "bucket": "s3-upload-with-nestjs",
+    "X-Amz-Algorithm": "AWS4-HMAC-SHA256",
+    "X-Amz-Credential": "AKIAWW3EB3Y6QS2UTYHC/20230227/ap-northeast-2/s3/aws4_request",
+    "X-Amz-Date": "20230227T071715Z",
+    "key": "presign-post.png",
+    "Policy": "eyJleHBpcmF0aW9uIjoiMjAyM...",
+    "X-Amz-Signature": "c449fa5f6ad3eeedfe70c05b4892bf89ba38681c757c3f4b506f672019d119d0"
+  }
+}
+```
+
+위에서 확인한 presigned url과는 좀 다른 형식으로 응답하는걸 확인할 수 있습니다. 여기 `field.key`가 우리가 원하는 `Key`인 것을 확인 할 수 있습니다.
+
+응답받은 값으로 어떻게 파일을 등록할 수 있는지 계속 확인해 보겠습니다.
+
+![img7](/static/blog/fileupload-with-presignedurl-7.png)
+
+위에서 응답 받은 값을 주소, fields의 값들을 `form-data`의 key-value로 넣습니다.
+
+추가로 `form-data`의 `file` 이라는 키에 업로드 하려는 파일을, `Content-Type` 에는 업도르 하려는 파일의 타입을 넣습니다
+
+타입은 위에서 `['starts-with', '$Content-Type', 'image/']`의 규칙과 맞아야합니다.
+
+`204 No Content` 응답을 받은 것으로 확인이 되는데요. S3에 들어가서 정상적으로 파일이 등록됐는지 확인해 보겠습니다.
+
+![img8](/static/blog/fileupload-with-presignedurl-8.png)
+
+파일이 등록된 것을 확인할 수 있습니다. 바로 파일 삭제도 확인 해 보겠습니다.
+
+![img9](/static/blog/fileupload-with-presignedurl-9.png)
+
+![img10](/static/blog/fileupload-with-presignedurl-10.png)
+
+정상적으로 삭제 되는것도 확인 가능합니다.
+
+감사합니다.
