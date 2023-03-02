@@ -2,7 +2,7 @@
 title: Custom class validator 만들기
 date: '2023-03-01'
 tags: ['javascript', 'class-validator']
-draft: true
+draft: false
 summary: class-validator에서 custom validation 만드는 방법에 대해 정리합니다.
 ---
 
@@ -113,11 +113,11 @@ dateString에 대한 값을 검증하기위에 3개의 검증 로직을 넣었�
 
 위와 같은 케이스 외에 다른 케이스에서도 위와 동일한 방법으로 케이스 확인이 가능합니다.
 
----
-
 위 예제는 클라이언트 쪽에서의 예제를 들었습니다. _(저는 주로, form 처리를 할때, react-hook-form과 @hookform/resolvers, class validator를 통해 검증을 처리합니다.)_
 
 [react-hook-form/resolvers#class-validator](https://github.com/react-hook-form/resolvers#class-validator)
+
+---
 
 두번째 예제로는 서버측에서 사용할 수 있는 예제를 들어보겠습니다.
 
@@ -125,11 +125,60 @@ dateString에 대한 값을 검증하기위에 3개의 검증 로직을 넣었�
 
 pk값이 1번인 유저가 5번인 유저를 팔로우하는 API를 만들어야 합니다.
 
-이때, 바디값을 아래와 같이 처리한다고 생각해봅시다. ~POST '/api/user/5/follow' 이런식으로 처리하는게 맞다고 생각합니다만 예시니...~
+이때, 바디값을 아래와 같이 처리한다고 생각해봅시다. _( POST '/api/user/5/follow' 이런식으로 처리하는게 맞지만 예로 들겠습니다. )_
 
 ```json
-// /api/user/follow
 {
   "user": 5
 }
 ```
+
+이 유저 번호가 올바른 유저 아이디인지 검증하는 로직을 서비스레이어에 넣을수도 있지만, 저는 입력값에 대한 `검증`이라고 생각하면 body 값을 검증하는
+`Pipe` 부분에서 처리하는게 맞다고 생각됩니다.
+
+```ts
+import {
+  registerDecorator,
+  ValidationOptions,
+  ValidatorConstraint,
+  ValidatorConstraintInterface,
+  ValidationArguments,
+} from 'class-validator'
+
+@ValidatorConstraint({ async: true })
+export class IsExistUserConstraint implements ValidatorConstraintInterface {
+  validate(idUser: number, args: ValidationArguments) {
+    const userRepository = getRepository(UserEntity)
+    return userRepository
+      .findOneOrFail(idUser)
+      .then((user) => true)
+      .catch((e) => false)
+  }
+}
+
+export function IsExistUser(validationOptions?: ValidationOptions) {
+  return function (object: Object, propertyName: string) {
+    registerDecorator({
+      name: 'IsExistUser',
+      async: true,
+      target: object.constructor,
+      propertyName: propertyName,
+      options: validationOptions,
+      constraints: [],
+      validator: IsExistUserConstraint,
+    })
+  }
+}
+```
+
+위에서 설명한대로 `registerDecorator`의 옵션에서 `validator`는 `ValidatorConstraintInterface`를 구현해야합니다.
+
+`ValidatorConstraintInterface`를 구현한 `IsExistUserConstraint`를 보면 값으로 받은 number 값을 userId로 찾습니다.
+
+i/o와 같은 작업은 비동기로 동작하기 때문에, `@ValidatorConstraint({ async: true })`와 같이 데코레이터에 async 옵션을 true로 설정합니다.
+
+이제, 유저 아이디에 대한 검증을 하는 `IsExistUser`를 만들고, validator 옵션에 위에서 구현한 `IsExistUserConstraint`를 연결합니다.
+
+이렇게 비동기로 유저 아이디를 검증하는 custom validator 까지 알아봤습니다.
+
+감사합니다.
