@@ -1,0 +1,184 @@
+---
+title: Custom class validator 만들기
+date: '2023-03-01'
+tags: ['javascript', 'class-validator']
+draft: false
+summary: class-validator에서 custom validation 만드는 방법에 대해 정리합니다.
+---
+
+폼 값에 대한 검증을 할때, `class-validator`를 주로 사용합니다.
+
+기본적으로 다양한 값을 검증할 수 있는 데코레이터들을 제공해주지만, 커스텀이 필요한 경우가 있습니다.
+
+간단한 예를 들어보겠습니다.
+
+![img1](/static/blog/custom-class-validator-1.png)
+
+위 이미지와 같이 기간을 입력받는 폼이고 이 필드의 형식은 아래와 같이 `Date | null` 형식을 배열로 받습니다.
+
+```ts
+export type DateRangePickerValue = [Date | null, Date | null]
+```
+
+따로 커스텀 검증 데코레이터를 만들지 않고, 필드를 2개로 나눠서 각 필드에 대한 값을 `@IsDateString` 데코레이터로 처리해 줄 수 있지만,
+좀 더 멋지게 처리해 보겠습니다.
+
+클래스 형식으로 작성해서 검증을 할 수 있지만, 문서상에서 가장 우아한 방법은 데코레이터를 만들어 검증하는 방법이라고 하니, 데코레이터로 작성 하는 방법을 알아보겟습니다.
+
+클레스로 검증하는 방법이 궁금하시면 링크를 통해 확인 가능합니다. [Custom validation classes](https://github.com/typestack/class-validator#custom-validation-classes)
+
+```ts
+import { registerDecorator, ValidationOptions, ValidationArguments } from 'class-validator'
+
+export function IsDueDateString(validationOptions?: ValidationOptions) {
+  return function (object: Object, propertyName: string) {
+    registerDecorator({
+      name: 'IsDueDateString',
+      target: object.constructor,
+      async: false,
+      propertyName: propertyName,
+      constraints: [], // * 아래 validate 의 args.contraints로 넘어감
+      options: validationOptions,
+      validator: {
+        // ValidatorConstraintInterface 구현
+        validate(value: any, args: ValidationArguments): boolean {
+          // 값 검증 로직
+          return true
+        },
+      },
+    })
+  }
+}
+
+export class BodyDto {
+  @IsDueDateString()
+  dueDate: [Date, Date]
+}
+```
+
+`IsDueDateString` 라는 데코레이터 함수를 만들었습니다. 데코레이션 함수에서 class validator의 검증을 실행하기 위해서는 `registerDecorator`를 실행 해야합니다.
+
+registerDecorator의 옵션은 아래와 같습니다.
+
+| 옵션 명      |                                       |
+| :----------- | ------------------------------------- |
+| name         | 등록되는 벨리데이션이 이름            |
+| target       | Target object to be validated         |
+| async        | 데코레이터가 비동기로 작동되는지 여부 |
+| propertyName | 프로퍼티 명                           |
+| constraints  | 벨리데이션 조건 배열                  |
+| options      | ValidationOptions                     |
+| validator    | ValidatorConstraintInterface          |
+
+이 번 포스팅에서 가장 중요한 부분인 `constraints`과 `validator`를 알아보도록 하겠습니다.
+
+validator는 `ValidatorConstraintInterface`를 구현해야합니다.
+
+ValidatorConstraintInterface를 보면 아래와 같습니다.
+
+```ts
+export interface ValidatorConstraintInterface {
+  /**
+   * Method to be called to perform custom validation over given value.
+   */
+  validate(value: any, validationArguments?: ValidationArguments): Promise<boolean> | boolean
+  /**
+   * Gets default message when validation for this constraint fail.
+   */
+  defaultMessage?(validationArguments?: ValidationArguments): string
+}
+```
+
+- `validate`는 boolean 값을 리턴하며, 폼 검증에 대한 성공 실패 여부를 리턴합니다.
+- `defaultMessage`는 실패 했을때 리턴되는 메세지를 리턴합니다.
+
+그럼 위 `IsDueDateString` 예제를 계속 만들어 보겠습니다.
+
+```ts
+validate(value: any, args: ValidationArguments): boolean {
+    // 1. value는 Date의 배열 입니다.
+    if(!Array.isArray(value)) return false;
+
+    // 2. value Date배열의 길이는 2개 입니다.
+    if(valie.length !== 2) return false;
+
+    // 3. value의 값들은 Date 의 instance이어야 합니다.
+    if(!valie.evenry(v => v instanceof Date)) return false;
+
+    return true;
+},
+```
+
+dateString에 대한 값을 검증하기위에 3개의 검증 로직을 넣었습니다.
+
+위와 같은 케이스 외에 다른 케이스에서도 위와 동일한 방법으로 케이스 확인이 가능합니다.
+
+위 예제는 클라이언트 쪽에서의 예제를 들었습니다. _(저는 주로, form 처리를 할때, react-hook-form과 @hookform/resolvers, class validator를 통해 검증을 처리합니다.)_
+
+[react-hook-form/resolvers#class-validator](https://github.com/react-hook-form/resolvers#class-validator)
+
+---
+
+두번째 예제로는 서버측에서 사용할 수 있는 예제를 들어보겠습니다.
+
+상황을 하나 만들어 보겠습니다.
+
+pk값이 1번인 유저가 5번인 유저를 팔로우하는 API를 만들어야 합니다.
+
+이때, 바디값을 아래와 같이 처리한다고 생각해봅시다. _( POST '/api/user/5/follow' 이런식으로 처리하는게 맞지만 예로 들겠습니다. )_
+
+```json
+{
+  "user": 5
+}
+```
+
+이 유저 번호가 올바른 유저 아이디인지 검증하는 로직을 서비스레이어에 넣을수도 있지만, 저는 입력값에 대한 `검증`이라고 생각하면 body 값을 검증하는
+`Pipe` 부분에서 처리하는게 맞다고 생각됩니다.
+
+```ts
+import {
+  registerDecorator,
+  ValidationOptions,
+  ValidatorConstraint,
+  ValidatorConstraintInterface,
+  ValidationArguments,
+} from 'class-validator'
+
+@ValidatorConstraint({ async: true })
+export class IsExistUserConstraint implements ValidatorConstraintInterface {
+  validate(idUser: number, args: ValidationArguments) {
+    const userRepository = getRepository(UserEntity)
+    return userRepository
+      .findOneOrFail(idUser)
+      .then((user) => true)
+      .catch((e) => false)
+  }
+}
+
+export function IsExistUser(validationOptions?: ValidationOptions) {
+  return function (object: Object, propertyName: string) {
+    registerDecorator({
+      name: 'IsExistUser',
+      async: true,
+      target: object.constructor,
+      propertyName: propertyName,
+      options: validationOptions,
+      constraints: [],
+      validator: IsExistUserConstraint,
+    })
+  }
+}
+```
+
+위에서 설명한대로 `registerDecorator`의 옵션에서 `validator`는 `ValidatorConstraintInterface`를 구현해야합니다.
+
+`ValidatorConstraintInterface`를 구현한 `IsExistUserConstraint`를 보면 값으로 받은 number 값을 userId로 찾습니다.
+
+i/o와 같은 작업은 비동기로 동작하기 때문에, `@ValidatorConstraint({ async: true })`와 같이 데코레이터에 async 옵션을 true로 설정합니다.
+
+이제, 유저 아이디에 대한 검증을 하는 `IsExistUser`를 만들고, validator 옵션에 위에서 구현한 `IsExistUserConstraint`를 연결합니다.
+
+이렇게 비동기로 유저 아이디를 검증하는 custom validator 까지 알아봤습니다.
+
+감사합니다.

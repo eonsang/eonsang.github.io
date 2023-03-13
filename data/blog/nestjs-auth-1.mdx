@@ -1,9 +1,9 @@
 ---
-title: Nestjs 인증 절차
+title: Nestjs 인증 절차 - 1
 date: '2022-01-20'
 tags: ['Nestjs', 'Authentication', 'local-auth', 'jwt']
 draft: true
-summary: Nestjs에서 인증 절차 및
+summary: Nestjs에서 인증 절차에 대해서 정리합니다.
 ---
 
 import Diagram from '@/components/Diagram'
@@ -43,6 +43,141 @@ Guard는 `CanActivate`라는 인터페이스를 구현해야하는데, `canActiv
 canActivate는 매개변수로 실행컨텍스트[[context: ExecutionContext](https://docs.nestjs.com/fundamentals/execution-context#execution-context)] 클래스를 인자로 받는데, `switchToHttp` 메소드를 통해 `HttpArgumentsHost`를 받아, Request에 접근할 수 있습니다. (getRequest)
 
 Request에 접근하면 당연히 `query`, `body`, `header`, `cookie`와 같이 client에서 들어온 값을 확인할 수 있습니다.
+
+---
+
+## 인증 구현하기
+
+`userService`의 샘플 코드입니다. DB를 대신해 메모리에 `users` 배열을 저장하고, `findUser`를 통해 메모리상의 users를 조회합니다.
+유저가 없거나 패스워드가 일치하지 않을 경우, 상황별 Exception 처리합니다.
+
+```typescript
+// src/users/users.service.ts
+
+@Injectable()
+export class UsersService {
+  users = [
+    {
+      serviceId: 'leeeonsang',
+      password: '1111',
+    },
+  ]
+
+  findUser(serviceId: string, password: string) {
+    const user = this.users.find((user) => user.serviceId === serviceId)
+    if (!user) throw new NotFoundException('유저를 찾을 수 없습니다.')
+
+    if (user.password !== password) {
+      throw new ConflictException('비밀번호가 일치하지 않습니다.')
+    }
+
+    return user
+  }
+}
+```
+
+`localAuthGuard` 코드입니다. 위에서 설명한 바와 같이, canActivate를 구현합니다. _(생명주기가 Pipe 전이므로, body 값에 대함 validation 처리가 되지 않습니다. 이 부분에 대한 추가 로직이 필요합니다.)_
+
+client에서 넘어온 serviceId와 password를 통해 유저를 조회합니다. 유저가 조회될 경우, request 객체에 조회된 user를 추가하고, true를 응답합니다.
+
+만약 유저가 조회되지 않을 경우, false를 리턴합니다.
+
+false가 리턴될 경우, `ForbiddenException`으로 응답합니다. ~~(nestjs 내부 구현)~~
+
+```typescript
+// src/auth/guards/localAuth.guard.ts
+
+export class LocalAuthGuard implements CanActivate {
+  constructor(@Inject(UsersService) private usersService: UsersService) {}
+
+  async canActivate(context: ExecutionContext): Promise<boolean> {
+    const request = context.switchToHttp().getRequest()
+
+    const { serviceId, password } = request.body
+    const user = await this.usersService.findUser(serviceId, password)
+
+    if (user) {
+      request.user = user
+      return true
+    }
+
+    return false
+  }
+}
+```
+
+`Controller` 코드 입니다.
+
+`@UseGuards(LocalAuthGuard)` 데코레이터를 통해, `localAuth` 메소드가 실행되기 전에 `Guard`가 실행됩니다. **LocalAuthGuard**에서 true가 리턴 됐다면, request객체에 user가 담겨 있으므로, **user**를 조회할 수 있습니다.
+
+```typescript
+// src/app.controller.ts
+
+@Controller()
+export class AppController {
+  @UseGuards(LocalAuthGuard)
+  @Post()
+  localAuth(@Req() req) {
+    return req.user
+  }
+}
+```
+
+위 코드를 실행해보면, `{"serviceId":"leeeonsang","password":"1111"}%`가 잘 응답되는걸 확인할 수 있습니다.
+
+계속해서 토큰발급을 위한 `authService.login` 메소드를 작성해보겠습니다. `JWT`를 통한 인증을 구현하므로, `jsonwebtoken` 패키지를 사용하도록 하겠습니다.
+
+user를 매개변수로 받아, `accessToken`을 생성하는데, payload로 유저의 serviceId를 넣어주도록 하겠습니다.
+
+```typescript
+import { Injectable } from '@nestjs/common'
+import * as jwt from 'jsonwebtoken'
+
+@Injectable()
+export class AuthService {
+  async login(user) {
+    const accessToken = jwt.sign({ serviceId: user.serviceId }, 'secure', {
+      expiresIn: '1h',
+    })
+
+    return {
+      user,
+      accessToken,
+    }
+  }
+}
+```
+
+이제 이 메서드를 `AppController.localAuth` 메서드에 추가해주도록 하겠습니다.
+
+```typescript
+// src/app.controller.ts
+
+@UseGuards(LocalAuthGuard)
+  @Post()
+  localAuth(@Req() req) {
+    return this.authService.login(req.user);
+  }
+}
+```
+
+```shell
+curl -d '{"serviceId":"leeeonsang", "password":"1111"}' \
+-H "Content-Type: application/json" \
+-X POST http://localhost:3002
+
+#{"user":{"serviceId":"leeeonsang","password":"1111"},"accessToken":"eyJhbGciOiJIUz..."}
+```
+
+정상적으로 처리되는것을 볼 수 있습니다. _(위 코드는 아주 간단히 작성된 코드 입니다. jwt 모듈을 만들어서 DI 형식으로 다른 service에서 처리할 수 도 있습니다.)_
+
+여기까지의 코드는 이쪽 (태그)[https://github.com/eonsang/dive-nestjs/releases/tag/auth-guard-1]에서 다운 받을 수 있습니다.
+
+---
+
+이제 이 부분을 `Passport`를 활용하여 처리하도록 차근차근 변경해 보겠습니다.
+
+...
 
 ## 참고문서
 
