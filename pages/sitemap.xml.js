@@ -3,6 +3,7 @@ const array = [
   '/blog/fileupload-with-multer',
   '/blog/custom-class-validator',
   '/blog/fileupload-with-presignedurl',
+  '/blog/redash/install',
 ]
 
 function sitemapScreen() {
