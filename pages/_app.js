@@ -23,10 +23,16 @@ export default function App({ Component, pageProps }) {
         <meta content="width=device-width, initial-scale=1" name="viewport" />
       </Head>
       <Script
+        id="Adsense-id"
         async
+        strategy="afterInteractive"
         src="https://pagead2.googlesyndication.com/pagead/js/adsbygoogle.js?client=ca-pub-7771475609046070"
         crossorigin="anonymous"
+        onError={(e) => {
+          console.error('Script failed to load', e)
+        }}
       />
+
       {isDevelopment && isSocket && <ClientReload />}
       <Analytics />
       <LayoutWrapper>
