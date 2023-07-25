@@ -7,12 +7,6 @@ const Disqus = ({ frontMatter }) => {
 
   const COMMENTS_ID = 'disqus_thread'
 
-  useEffect(() => {
-    setTimeout(() => {
-      LoadComments()
-    })
-  }, [])
-
   function LoadComments() {
     setEnabledLoadComments(false)
 
@@ -31,6 +25,12 @@ const Disqus = ({ frontMatter }) => {
       window.DISQUS.reset({ reload: true })
     }
   }
+
+  useEffect(() => {
+    setTimeout(() => {
+      LoadComments()
+    })
+  }, [])
 
   return (
     <div className="pt-6 pb-6 text-center text-gray-700 dark:text-gray-300">
