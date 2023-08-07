@@ -39,11 +39,16 @@ const TOCInline = ({
 
   const tocList = (
     <div className={'bg-slate-100 p-4 dark:bg-gray-800'}>
-      <h2 className="mt-0 text-lg">TOC</h2>
-      <ul>
+      <h2 className="text-md mt-0 font-bold">TOC</h2>
+      <ul className={'mt-4'}>
         {filteredToc.map((heading) => (
-          <li key={heading.value} className={`${heading.depth >= indentDepth && 'ml-6'}`}>
-            <a href={heading.url}>{heading.value}</a>
+          <li key={heading.value} className={`${heading.depth >= indentDepth && 'ml-3'}`}>
+            <a
+              href={heading.url}
+              className={`text-sm ${heading.depth < indentDepth && 'font-bold'}`}
+            >
+              {heading.value}
+            </a>
           </li>
         ))}
       </ul>
