@@ -23,7 +23,7 @@ summary: 데이터베이스에서 돌아가던 분석용 쿼리를 Glue를 통�
 
 스냅샷이 생성되면 스냅샷 상세페이지에서 `Amazon S3로 내보내기` 버튼을 눌러 S3로 내보낼 수 있습니다.
 
-![S3내보내기](/static/blog/athenaglue-1.png)
+![img1](/static/blog/athenaglue-1.png)
 
 내보내기를 누르면, 내기내기 위한 기본 설정이 필요합니다.
 
@@ -68,20 +68,7 @@ summary: 데이터베이스에서 돌아가던 분석용 쿼리를 Glue를 통�
 
 - 암호화: AWS KMS 키를 등록하고 지정합니다.
 
-![S3내보내기 설정-1](/static/blog/athenaglue-2.png)
-
-![S3내보내기 설정-2](/static/blog/athenaglue-3.png)
-
-내보내기를 클릭하면 아래화면과 같이 작업이 생성됩니다. ~~이 과정에서 100G 기준 30분정도 소요됐었습니다.~~
-
-![S3내보내기 진행](/static/blog/athenaglue-4.png)
-
-작업이 완료되면 위에서 설정한 S3 폴더에 parquet 데이터가 저장된 것을 확인할 수 있습니다.
-
-## data catalog 생성
-
-위 1번 과정에서
-
+2. Glue Crawler 생성
 3. Glue를 통해 데이터 파티셔닝
 4. Athena에서 데이터 조회
 
