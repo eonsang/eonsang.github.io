@@ -86,7 +86,7 @@ export default function PostLayout({ frontMatter, authorDetails, next, prev, chi
                     <h2 className="text-xs uppercase tracking-wide text-gray-500 dark:text-gray-400">
                       Tags
                     </h2>
-                    <div className="flex flex-wrap">
+                    <div className="flex flex-wrap gap-2">
                       {tags.map((tag) => (
                         <Tag key={tag} text={tag} />
                       ))}
@@ -118,14 +118,14 @@ export default function PostLayout({ frontMatter, authorDetails, next, prev, chi
                   </div>
                 )}
               </div>
-              <div className="pt-4 xl:pt-8">
+              {/* <div className="pt-4 xl:pt-8">
                 <Link
                   href="/blog"
                   className="text-primary-500 hover:text-primary-600 dark:hover:text-primary-400"
                 >
                   &larr; Back to the blog
                 </Link>
-              </div>
+              </div> */}
             </footer>
           </div>
         </div>

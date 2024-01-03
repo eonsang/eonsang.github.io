@@ -5,7 +5,7 @@ import { useState } from 'react'
 import Pagination from '@/components/Pagination'
 import formatDate from '@/lib/utils/formatDate'
 
-export default function ListLayout({ posts, title, initialDisplayPosts = [], pagination }) {
+export default function ListLayout({ type, posts, title, initialDisplayPosts = [], pagination }) {
   const [searchValue, setSearchValue] = useState('')
   const filteredBlogPosts = posts.filter((frontMatter) => {
     const searchContent = frontMatter.title + frontMatter.summary + frontMatter.tags.join(' ')
@@ -84,7 +84,11 @@ export default function ListLayout({ posts, title, initialDisplayPosts = [], pag
         </ul>
       </div>
       {pagination && pagination.totalPages > 1 && !searchValue && (
-        <Pagination currentPage={pagination.currentPage} totalPages={pagination.totalPages} />
+        <Pagination
+          currentPage={pagination.currentPage}
+          totalPages={pagination.totalPages}
+          base={type === 'books' ? '/books/page' : null}
+        />
       )}
     </>
   )
