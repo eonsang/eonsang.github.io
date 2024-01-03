@@ -33,6 +33,25 @@ export default function App({ Component, pageProps }) {
         }}
       />
 
+      <Script
+        id="naver-analyze"
+        type="text/javascript"
+        async
+        strategy="afterInteractive"
+        src="//wcs.naver.net/wcslog.js"
+        crossorigin="anonymous"
+      />
+
+      <Script id="naver-analyze-code" strategy="afterInteractive">
+        {`
+        if(!wcs_add) var wcs_add = {};
+        wcs_add["wa"] = "1c3b5a7ced3c980";
+        if(window.wcs) {
+        wcs_do();
+        }
+        `}
+      </Script>
+
       {isDevelopment && isSocket && <ClientReload />}
       <Analytics />
       <LayoutWrapper>
