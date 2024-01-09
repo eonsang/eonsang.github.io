@@ -5,6 +5,7 @@ import Image from './Image'
 import CustomLink from './Link'
 import TOCInline from './TOCInline'
 import Pre from './Pre'
+import DeployStatisSiteSeries from './series/DeployStatisSiteSeries'
 
 export const MDXComponents = {
   Image,
@@ -15,6 +16,8 @@ export const MDXComponents = {
     const Layout = require(`../layouts/${layout}`).default
     return <Layout {...rest} />
   },
+
+  DeployStatisSiteSeries,
 }
 
 export const MDXLayoutRenderer = ({ layout, mdxSource, ...rest }) => {

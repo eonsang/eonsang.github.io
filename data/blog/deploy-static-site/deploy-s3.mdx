@@ -1,0 +1,42 @@
+---
+title: 정적 사이트 배포(1) - with. nextjs, S3
+date: '2024-01-09'
+tags: ['S3', 'Nextjs', 'static_site']
+draft: true
+summary: Nextjs와 S3를 통한 정적사이트 배포 방법
+---
+
+<DeployStatisSiteSeries />
+
+이번에 관리자 페이지를 정적페이지로 배포하면서 겪었던, 배포 절차에 대해 정리하겠습니다.
+
+이번편은 1편으로 S3의 정적 사이트 호스팅 기능을 이용하여 배포하는 방법에 대해 정리하겠습니다.
+
+## S3 정적 사이트 호스팅
+
+### S3 버킷 생성 설정 및 생성
+
+### 파일 업로드
+
+### 정적 웹 사이트 호스팅 및 접속
+
+![img1](/static/blog/deploy-static-site/img-1.png)
+
+### 버킷 정책 변경
+
+```
+{
+    "Version": "2012-10-17",
+    "Statement": [
+        {
+            "Sid": "Statement1",
+            "Effect": "Allow",
+            "Principal": "*",
+            "Action": "s3:GetObject",
+            "Resource": "arn:aws:s3:::export-web-sample/*"
+        }
+    ]
+}
+```
+
+## 3. 마무리
